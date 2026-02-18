@@ -1,12 +1,24 @@
 "use client";
+
 import React, { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
-import { Key, Copy, Plus, Trash2, Check, AlertCircle } from 'lucide-react';
+import { 
+  Key, 
+  Copy, 
+  Plus, 
+  Trash2, 
+  Check, 
+  AlertCircle, 
+  Loader2, 
+  ExternalLink,
+  ShieldCheck,
+  Fingerprint
+} from 'lucide-react';
 
 interface ApiKey {
   id: string;
   label: string;
-  key_snippet: string; // Wir speichern nur ein Fragment zur Anzeige
+  key_snippet: string;
   created_at: string;
 }
 
@@ -14,9 +26,9 @@ export default function ApiKeysPage() {
   const [keys, setKeys] = useState<ApiKey[]>([]);
   const [isGenerating, setIsGenerating] = useState(false);
   const [newKeyFull, setNewKeyFull] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
   const [loading, setLoading] = useState(true);
 
-  // 1. Echte Keys beim Laden der Seite abrufen
   useEffect(() => {
     fetchKeys();
   }, []);
@@ -28,106 +40,137 @@ export default function ApiKeysPage() {
       .select('id, label, key_snippet, created_at')
       .order('created_at', { ascending: false });
 
-    if (!error && data) {
-      setKeys(data);
-    }
+    if (!error && data) setKeys(data);
     setLoading(false);
   };
 
-  // 2. Einen echten Key über die Edge Function generieren
   const generateKey = async () => {
     setIsGenerating(true);
+    setNewKeyFull(null);
     try {
-      // Aufruf der Supabase Edge Function "manage-keys"
       const { data, error } = await supabase.functions.invoke('manage-keys', {
-        body: { label: 'Produktions Key' }
+        body: { label: 'Production Key' }
       });
 
       if (error) throw error;
 
-      // Den vollen Key nur EINMALIG anzeigen (Sicherheitsgründen)
       setNewKeyFull(data.apiKey);
-      
-      // Liste neu laden
       fetchKeys();
     } catch (err: any) {
-      alert("Fehler: " + (err.message || "Key konnte nicht erstellt werden"));
+      console.error("Generation failed:", err.message);
     } finally {
       setIsGenerating(false);
     }
   };
 
+  const copyToClipboard = (text: string) => {
+    navigator.clipboard.writeText(text);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
   return (
-    <div className="max-w-4xl mx-auto space-y-8 animate-in fade-in duration-500">
-      <div className="flex justify-between items-end">
+    <div className="max-w-5xl mx-auto space-y-10 animate-in fade-in slide-in-from-bottom-4 duration-700">
+      
+      {/* Header Section */}
+      <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
         <div>
-          <h1 className="text-3xl font-bold">API Keys</h1>
-          <p className="text-slate-500 mt-2">Verwalte deine Zugangsdaten für externe Systeme.</p>
+          <h1 className="text-4xl font-bold tracking-tight text-white">API Credentials</h1>
+          <p className="text-zinc-500 mt-2 text-lg">Manage secret keys to authenticate your API requests.</p>
         </div>
         <button 
           onClick={generateKey}
           disabled={isGenerating}
-          className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-2xl font-semibold flex items-center gap-2 transition-all disabled:opacity-50 shadow-lg shadow-blue-500/20"
+          className="bg-white hover:bg-zinc-200 text-black px-6 py-3 rounded-xl font-bold flex items-center gap-2 transition-all active:scale-95 disabled:opacity-50"
         >
-          <Plus size={20} />
-          {isGenerating ? 'Generiere...' : 'Key erstellen'}
+          {isGenerating ? <Loader2 className="animate-spin" size={20} /> : <Plus size={20} />}
+          Generate New Key
         </button>
       </div>
 
-      {/* Warnung wenn ein neuer Key erstellt wurde */}
+      {/* One-time Display for New Key */}
       {newKeyFull && (
-        <div className="bg-emerald-50 border-2 border-emerald-200 dark:bg-emerald-900/20 dark:border-emerald-800 p-6 rounded-3xl space-y-3">
-          <div className="flex items-center gap-2 text-emerald-700 dark:text-emerald-400 font-bold">
-            <Check size={20} />
-            Key erfolgreich generiert!
+        <div className="bg-white text-black p-8 rounded-3xl shadow-[0_0_50px_rgba(255,255,255,0.15)] animate-in zoom-in-95 duration-300">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="p-2 bg-black text-white rounded-lg">
+              <ShieldCheck size={20} />
+            </div>
+            <h2 className="text-xl font-bold tracking-tight">Secret Key Generated</h2>
           </div>
-          <p className="text-sm text-emerald-600 dark:text-emerald-500">
-            Kopiere diesen Key jetzt. Er wird danach nie wieder vollständig angezeigt:
+          <p className="text-sm text-zinc-600 mb-6 font-medium">
+            Please copy this key now. For security reasons, it will <span className="underline decoration-2">never be shown again</span>.
           </p>
-          <div className="flex items-center gap-2 bg-white dark:bg-slate-800 p-3 rounded-xl border border-emerald-200">
-            <code className="flex-1 font-mono text-blue-600 truncate">{newKeyFull}</code>
+          <div className="flex items-center gap-3 bg-zinc-100 p-4 rounded-2xl border border-zinc-200">
+            <code className="flex-1 font-mono text-sm font-bold break-all">{newKeyFull}</code>
             <button 
-              onClick={() => navigator.clipboard.writeText(newKeyFull)}
-              className="p-2 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-colors"
+              onClick={() => copyToClipboard(newKeyFull)}
+              className="p-3 bg-black text-white hover:bg-zinc-800 rounded-xl transition-all flex items-center gap-2 shrink-0"
             >
-              <Copy size={18} />
+              {copied ? <Check size={18} /> : <Copy size={18} />}
+              <span className="text-xs font-bold uppercase">{copied ? 'Copied' : 'Copy'}</span>
             </button>
           </div>
         </div>
       )}
 
-      {/* Liste der Keys */}
-      <div className="space-y-4">
-        {loading ? (
-          <div className="text-center py-10 text-slate-500 text-sm">Lade Keys...</div>
-        ) : keys.length === 0 ? (
-          <div className="text-center py-12 bg-slate-50 dark:bg-slate-900/50 rounded-3xl border-2 border-dashed border-slate-200 dark:border-slate-800">
-            <Key className="mx-auto text-slate-300 mb-3" size={40} />
-            <p className="text-slate-500">Noch keine API Keys vorhanden.</p>
-          </div>
-        ) : (
-          keys.map((k) => (
-            <div key={k.id} className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 rounded-2xl flex items-center justify-between group">
-              <div className="flex items-center gap-4">
-                <div className="w-10 h-10 bg-slate-100 dark:bg-slate-800 rounded-xl flex items-center justify-center text-slate-500">
-                  <Key size={20} />
-                </div>
-                <div>
-                  <h3 className="font-semibold">{k.label}</h3>
-                  <code className="text-xs text-slate-400 font-mono">sk_live_...{k.key_snippet}</code>
-                </div>
-              </div>
-              <div className="flex items-center gap-6">
-                <span className="text-xs text-slate-400">
-                  Erstellt am {new Date(k.created_at).toLocaleDateString()}
-                </span>
-                <button className="text-slate-400 hover:text-red-500 transition-colors p-2">
-                  <Trash2 size={18} />
-                </button>
-              </div>
+      {/* Keys Table/List */}
+      <div className="bg-[#0a0a0a] border border-[#262626] rounded-3xl overflow-hidden">
+        <div className="p-6 border-b border-[#262626] bg-[#0c0c0c] flex items-center gap-2">
+          <Fingerprint size={18} className="text-zinc-500" />
+          <h3 className="text-sm font-bold uppercase tracking-widest text-zinc-400">Active Access Keys</h3>
+        </div>
+
+        <div className="divide-y divide-[#262626]">
+          {loading ? (
+            <div className="p-20 flex justify-center">
+              <Loader2 className="animate-spin text-zinc-700" size={32} />
             </div>
-          ))
-        )}
+          ) : keys.length === 0 ? (
+            <div className="p-20 text-center flex flex-col items-center">
+              <div className="w-16 h-16 bg-[#121212] rounded-full flex items-center justify-center text-zinc-700 mb-4">
+                <Key size={32} />
+              </div>
+              <p className="text-zinc-500 font-medium italic">No API keys found. Create one to get started.</p>
+            </div>
+          ) : (
+            keys.map((k) => (
+              <div key={k.id} className="p-6 flex items-center justify-between hover:bg-[#121212]/50 transition-all group">
+                <div className="flex items-center gap-5">
+                  <div className="w-12 h-12 bg-[#121212] border border-[#262626] rounded-2xl flex items-center justify-center text-zinc-500 group-hover:text-white group-hover:border-zinc-500 transition-all">
+                    <Key size={22} />
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-white group-hover:translate-x-1 transition-transform">{k.label}</h3>
+                    <div className="flex items-center gap-2 mt-1">
+                      <code className="text-xs text-zinc-500 font-mono bg-[#161616] px-2 py-0.5 rounded">
+                        sk_live_••••••••{k.key_snippet}
+                      </code>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-8">
+                  <div className="hidden md:block text-right">
+                    <p className="text-[10px] font-bold text-zinc-600 uppercase tracking-widest">Created</p>
+                    <p className="text-xs text-zinc-400 mt-0.5">{new Date(k.created_at).toLocaleDateString()}</p>
+                  </div>
+                  <button className="p-2.5 text-zinc-600 hover:text-red-500 hover:bg-red-500/10 rounded-xl transition-all">
+                    <Trash2 size={20} />
+                  </button>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      </div>
+
+      {/* Help Section */}
+      <div className="flex items-center gap-4 p-6 bg-[#121212] border border-[#262626] rounded-2xl text-zinc-400">
+        <AlertCircle size={20} className="shrink-0" />
+        <p className="text-sm">
+          Keep your API keys secure. If a key is compromised, delete it immediately and generate a new one. 
+          View our <span className="text-white hover:underline cursor-pointer flex-inline items-center gap-1">Security Documentation <ExternalLink size={12} className="inline mb-1" /></span>.
+        </p>
       </div>
     </div>
   );
